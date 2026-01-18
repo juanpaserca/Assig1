@@ -175,137 +175,129 @@ def simular(esc_id, algo):
             "costo": costo, "nodos": nodos, "replans": replans, "pasos": pasos}
 
 # ==================== HTML PARA COLAB ====================
+def render_mapa(mapa, path, workers_pos):
+    """Renderiza un mapa como HTML estatico"""
+    path_set = set((p[0], p[1]) for p in path)
+    workers_set = set((pos[0], pos[1]) for pos in workers_pos.values())
+    
+    cells = ""
+    for r, row in enumerate(mapa):
+        for c, ch in enumerate(row):
+            # Determinar clase CSS
+            if (r, c) in workers_set:
+                cls = "c-worker"
+                txt = "W"
+            elif ch == '#':
+                cls = "c-wall"
+                txt = ""
+            elif ch == 'G':
+                cls = "c-gas"
+                txt = "X"
+            elif ch == 'E':
+                cls = "c-exit"
+                txt = "E"
+            elif ch == 'F':
+                cls = "c-refuge"
+                txt = "F"
+            elif ch == 'X':
+                cls = "c-collapse"
+                txt = "!"
+            elif (r, c) in path_set:
+                cls = "c-path"
+                txt = ""
+            else:
+                cls = "c-floor"
+                txt = ""
+            cells += f'<div class="cell {cls}">{txt}</div>'
+    
+    return cells
+
 def generar_html(res):
-    data = {f"{r['esc']}_{r['algo']}": r for r in res}
-    filas = "\n".join(f'''<tr class="row" data-k="{r['esc']}_{r['algo']}">
+    filas = "\n".join(f'''<tr style="background:rgba(52,152,219,0.1)">
         <td>{r['esc']}</td><td><b>{r['algo']}</b></td>
         <td>{len(r['path'])-1}</td><td>{r['costo']:.0f}</td>
         <td>{r['nodos']}</td><td>{r['replans']}</td></tr>''' for r in res)
     
-    html = f'''<div id="evacuation-app">
+    # Generar mapas estaticos para cada resultado
+    mapas_html = ""
+    for r in res:
+        ultimo_paso = r['pasos'][-1]
+        mapa_cells = render_mapa(ultimo_paso['mapa'], r['path'], ultimo_paso['pos'])
+        mapas_html += f'''
+        <div class="mapa-container" style="margin:20px 0;padding:15px;background:rgba(0,0,0,0.2);border-radius:8px">
+            <h3 style="color:#3498db;margin-bottom:10px">{r['esc']} - {r['algo']}</h3>
+            <p style="color:#aaa;margin-bottom:10px">Pasos: {len(r['path'])-1} | Costo: {r['costo']:.0f} | Nodos: {r['nodos']}</p>
+            <div class="grid" style="display:grid;grid-template-columns:repeat(20,24px);gap:1px;justify-content:center">
+                {mapa_cells}
+            </div>
+        </div>'''
+    
+    html = f'''<div style="font-family:Arial;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:20px;border-radius:12px">
 <style>
-#evacuation-app *{{margin:0;padding:0;box-sizing:border-box}}
-#evacuation-app {{font-family:Arial;background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:20px;border-radius:12px}}
-#evacuation-app .panel{{background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;margin:15px 0}}
-#evacuation-app h1{{text-align:center;margin-bottom:20px}}
-#evacuation-app h2{{color:#3498db;border-bottom:2px solid #3498db;padding-bottom:8px;margin-bottom:15px}}
-#evacuation-app table{{width:100%;border-collapse:collapse}}
-#evacuation-app th,#evacuation-app td{{padding:10px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.1)}}
-#evacuation-app th{{background:rgba(52,152,219,0.3)}}
-#evacuation-app .row{{cursor:pointer}}#evacuation-app .row:hover,#evacuation-app .row.sel{{background:rgba(52,152,219,0.3)}}
-#evacuation-app #map{{display:grid;gap:2px;justify-content:center;margin:15px 0}}
-#evacuation-app .cell{{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-size:12px}}
-#evacuation-app .c-wall{{background:#2c3e50}}#evacuation-app .c-floor{{background:#ecf0f1;color:#333}}#evacuation-app .c-start{{background:#3498db}}
-#evacuation-app .c-exit{{background:#27ae60}}#evacuation-app .c-refuge{{background:#16a085}}#evacuation-app .c-gas{{background:#e74c3c}}#evacuation-app .c-collapse{{background:#8b4513}}
-#evacuation-app .c-path{{background:#f1c40f!important;color:#333}}#evacuation-app .c-worker{{background:#e67e22!important;border-radius:50%}}
-#evacuation-app .controls{{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:15px 0}}
-#evacuation-app button{{padding:8px 16px;border:none;border-radius:6px;cursor:pointer;background:#3498db;color:#fff}}
-#evacuation-app button:hover{{background:#2980b9}}
-#evacuation-app .legend{{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:10px 0}}
-#evacuation-app .leg{{display:flex;align-items:center;gap:5px}}#evacuation-app .leg-c{{width:20px;height:20px;border-radius:3px}}
-#evacuation-app .info{{background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;margin:10px 0}}
-#evacuation-app .info-row{{display:flex;justify-content:space-between;padding:4px 0}}
-#evacuation-app .alert{{background:#e74c3c;padding:10px;border-radius:8px;text-align:center;margin:10px 0;display:none}}
-#evacuation-app .reas{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}}
-#evacuation-app .reas-item{{background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center}}
-#evacuation-app .reas-item h4{{font-size:1.8em;color:#3498db}}
+.cell{{width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:2px;font-size:10px;font-weight:bold}}
+.c-wall{{background:#2c3e50}}
+.c-floor{{background:#ecf0f1}}
+.c-exit{{background:#27ae60;color:#fff}}
+.c-refuge{{background:#16a085;color:#fff}}
+.c-gas{{background:#e74c3c;color:#fff}}
+.c-collapse{{background:#8b4513;color:#fff}}
+.c-path{{background:#f1c40f}}
+.c-worker{{background:#e67e22;color:#fff;border-radius:50%}}
 </style>
 
-<div class="panel"><h1>⛏️ Evacuación en Mina Subterránea</h1>
-<p style="text-align:center;color:#aaa">Comparación: BFS vs UCS vs Greedy vs A*</p></div>
-
-<div class="panel"><h2>🤖 Modelo REAS</h2>
-<div class="reas">
-<div class="reas-item"><h4>R</h4><b>Reactividad</b><br><small>Reacciona a gas/derrumbes</small></div>
-<div class="reas-item"><h4>E</h4><b>Entorno</b><br><small>Mapa dinámico discreto</small></div>
-<div class="reas-item"><h4>A</h4><b>Autonomía</b><br><small>Decide ruta sin humanos</small></div>
-<div class="reas-item"><h4>S</h4><b>Sociabilidad</b><br><small>Agentes cooperando</small></div>
-</div></div>
-
-<div class="panel"><h2>📊 Resultados</h2>
-<p style="margin-bottom:10px">Clic en una fila para ver animación</p>
-<table><tr><th>Escenario</th><th>Algoritmo</th><th>Pasos</th><th>Costo</th><th>Nodos</th><th>Replans</th></tr>
-{filas}</table></div>
-
-<div class="panel"><h2>🎮 Visualización</h2>
-<div class="controls">
-<button onclick="prev()">⏮ Ant</button><button id="playBtn" onclick="toggle()">▶ Play</button>
-<button onclick="next()">Sig ⏭</button><span id="stepTxt">Paso: 0/0</span>
-<button onclick="reset()">🔄</button></div>
-<div class="legend">
-<div class="leg"><div class="leg-c" style="background:#2c3e50"></div>Pared</div>
-<div class="leg"><div class="leg-c" style="background:#ecf0f1"></div>Galería</div>
-<div class="leg"><div class="leg-c" style="background:#27ae60"></div>Salida</div>
-<div class="leg"><div class="leg-c" style="background:#16a085"></div>Refugio</div>
-<div class="leg"><div class="leg-c" style="background:#e74c3c"></div>Gas</div>
-<div class="leg"><div class="leg-c" style="background:#8b4513"></div>Derrumbe</div>
-<div class="leg"><div class="leg-c" style="background:#f1c40f"></div>Ruta</div>
-<div class="leg"><div class="leg-c" style="background:#e67e22;border-radius:50%"></div>Trabajador</div>
+<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;margin:15px 0">
+<h1 style="text-align:center;margin-bottom:20px">Evacuacion en Mina Subterranea</h1>
+<p style="text-align:center;color:#aaa">Comparacion: BFS vs UCS vs Greedy vs A*</p>
 </div>
-<div id="map"></div>
-<div id="alert" class="alert"></div>
-<div class="info">
-<div class="info-row"><span>Escenario:</span><span id="iScen">-</span></div>
-<div class="info-row"><span>Algoritmo:</span><span id="iAlgo">-</span></div>
-<div class="info-row"><span>Costo:</span><span id="iCost">-</span></div>
-<div class="info-row"><span>Nodos:</span><span id="iNodes">-</span></div>
-</div></div>
 
-<div class="panel"><h2>📚 Algoritmos</h2>
-<div class="reas">
-<div class="reas-item"><b>BFS</b><br><small>Menos pasos, ignora costos</small></div>
-<div class="reas-item"><b>UCS</b><br><small>Menor costo total</small></div>
-<div class="reas-item"><b>Greedy</b><br><small>Rápido, no óptimo</small></div>
-<div class="reas-item"><b>A*</b><br><small>Óptimo y eficiente</small></div>
-</div></div>
+<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;margin:15px 0">
+<h2 style="color:#3498db;border-bottom:2px solid #3498db;padding-bottom:8px">Modelo REAS</h2>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:10px 0">
+<div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center"><h4 style="font-size:1.8em;color:#3498db">R</h4><b>Reactividad</b><br><small>Reacciona a gas/derrumbes</small></div>
+<div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center"><h4 style="font-size:1.8em;color:#3498db">E</h4><b>Entorno</b><br><small>Mapa dinamico discreto</small></div>
+<div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center"><h4 style="font-size:1.8em;color:#3498db">A</h4><b>Autonomia</b><br><small>Decide ruta sin humanos</small></div>
+<div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center"><h4 style="font-size:1.8em;color:#3498db">S</h4><b>Sociabilidad</b><br><small>Agentes cooperando</small></div>
+</div>
+</div>
 
-<script>
-const DATA=DATA_PLACEHOLDER;
-let cur=null,step=0,playing=false,timer=null;
+<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;margin:15px 0">
+<h2 style="color:#3498db;border-bottom:2px solid #3498db;padding-bottom:8px">Resultados</h2>
+<table style="width:100%;border-collapse:collapse">
+<tr style="background:rgba(52,152,219,0.3)"><th style="padding:10px">Escenario</th><th>Algoritmo</th><th>Pasos</th><th>Costo</th><th>Nodos</th><th>Replans</th></tr>
+{filas}
+</table>
+</div>
 
-document.querySelectorAll('#evacuation-app .row').forEach(r=>r.onclick=()=>select(r));
-document.querySelector('#evacuation-app .row')?.click();
+<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;margin:15px 0">
+<h2 style="color:#3498db;border-bottom:2px solid #3498db;padding-bottom:8px">Leyenda</h2>
+<div style="display:flex;gap:15px;flex-wrap:wrap;justify-content:center">
+<span><span style="display:inline-block;width:20px;height:20px;background:#2c3e50;border-radius:3px"></span> Pared</span>
+<span><span style="display:inline-block;width:20px;height:20px;background:#ecf0f1;border-radius:3px"></span> Galeria</span>
+<span><span style="display:inline-block;width:20px;height:20px;background:#27ae60;border-radius:3px"></span> Salida</span>
+<span><span style="display:inline-block;width:20px;height:20px;background:#16a085;border-radius:3px"></span> Refugio</span>
+<span><span style="display:inline-block;width:20px;height:20px;background:#e74c3c;border-radius:3px"></span> Gas</span>
+<span><span style="display:inline-block;width:20px;height:20px;background:#8b4513;border-radius:3px"></span> Derrumbe</span>
+<span><span style="display:inline-block;width:20px;height:20px;background:#f1c40f;border-radius:3px"></span> Ruta</span>
+<span><span style="display:inline-block;width:20px;height:20px;background:#e67e22;border-radius:50%"></span> Trabajador</span>
+</div>
+</div>
 
-function select(row){{
-  document.querySelectorAll('#evacuation-app .row').forEach(r=>r.classList.remove('sel'));
-  row.classList.add('sel');
-  cur=DATA[row.dataset.k];step=0;stop();
-  document.getElementById('iScen').textContent=cur.esc;
-  document.getElementById('iAlgo').textContent=cur.algo;
-  document.getElementById('iCost').textContent=cur.costo.toFixed(1);
-  document.getElementById('iNodes').textContent=cur.nodos;
-  render();
-}}
+<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;margin:15px 0">
+<h2 style="color:#3498db;border-bottom:2px solid #3498db;padding-bottom:8px">Mapas Finales</h2>
+{mapas_html}
+</div>
 
-function render(){{
-  if(!cur)return;
-  const s=cur.pasos[step],map=document.getElementById('map'),lines=s.mapa;
-  map.style.gridTemplateColumns=`repeat(${{lines[0].length}},28px)`;
-  map.innerHTML='';
-  for(let r=0;r<lines.length;r++)for(let c=0;c<lines[0].length;c++){{
-    const ch=lines[r][c],cell=document.createElement('div');
-    cell.className='cell '+({{' #':'c-wall','.':'c-floor','S':'c-start','E':'c-exit','F':'c-refuge','G':'c-gas','X':'c-collapse'}}[ch]||'c-floor');
-    if(ch==='G')cell.textContent='☠️';
-    if(ch==='E')cell.textContent='🚪';
-    if(ch==='F')cell.textContent='🏠';
-    if(ch==='X')cell.textContent='💥';
-    if(cur.path.some(p=>p[0]===r&&p[1]===c)&&!'EFG'.includes(ch))cell.classList.add('c-path');
-    for(const[,pos]of Object.entries(s.pos))if(pos[0]===r&&pos[1]===c){{cell.classList.add('c-worker');cell.textContent='👷';}}
-    map.appendChild(cell);
-  }}
-  document.getElementById('stepTxt').textContent=`Paso: ${{step}}/${{cur.pasos.length-1}}`;
-  const alert=document.getElementById('alert');
-  if(s.evento){{alert.textContent=s.evento;alert.style.display='block';}}else alert.style.display='none';
-}}
+<div style="background:rgba(255,255,255,0.1);border-radius:12px;padding:20px;margin:15px 0">
+<h2 style="color:#3498db;border-bottom:2px solid #3498db;padding-bottom:8px">Algoritmos</h2>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+<div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center"><b>BFS</b><br><small>Menos pasos, ignora costos</small></div>
+<div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center"><b>UCS</b><br><small>Menor costo total</small></div>
+<div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center"><b>Greedy</b><br><small>Rapido, no optimo</small></div>
+<div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center"><b>A*</b><br><small>Optimo y eficiente</small></div>
+</div>
+</div>
 
-function next(){{if(cur&&step<cur.pasos.length-1){{step++;render();}}else stop();}}
-function prev(){{if(cur&&step>0){{step--;render();}}}}
-function toggle(){{playing?stop():start();}}
-function start(){{playing=true;document.getElementById('playBtn').textContent='⏸';timer=setInterval(next,400);}}
-function stop(){{playing=false;document.getElementById('playBtn').textContent='▶ Play';clearInterval(timer);}}
-function reset(){{step=0;stop();render();}}
-</script>
-</div>'''.replace('DATA_PLACEHOLDER', json.dumps(data, ensure_ascii=False))
+</div>'''
     
     return html
 
